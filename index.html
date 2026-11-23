@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carte pollution lumineuse</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    #carte { height: 70vh; }
+    .leaflet-container { cursor: crosshair; }
+    #formulaire { padding: 10px; }
+    input { width: 100%; font-size: 18px; margin-bottom: 8px; box-sizing: border-box; }
+    button { width: 100%; font-size: 18px; padding: 10px; }
+  </style>
+</head>
+<body>
+  <div id="carte"></div>
+
+  <div id="formulaire">
+    <input id="lux" type="number" placeholder="Luminosité (lux, appli phyphox)">
+    <input id="etoiles" type="number" placeholder="Nombre d'étoiles visibles dans Orion">
+    <button id="bouton">📍 Ajouter ma mesure ici</button>
+    <p>Astuce : tu peux aussi cliquer sur la carte pour choisir l'endroit.</p>
+  </div>
+
+  <script>
+       // --- L'adresse de ton tableau (colle TON URL /exec ici) ---
+    const URL_TABLEAU = 'https://script.google.com/macros/s/AKfycbyZlCL2lkNJq9_YW5FORS5xGPdR5uUppBaN3lbemgSv37rT4vNptVrxkVH5Ut5nApajWg/exec';
+
+    // --- La carte ---
+    const carte = L.map('carte').setView([43.70, 7.27], 12);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+      attribution: '© Esri'
+    }).addTo(carte);
+
+    // --- Couleur selon le nombre d'étoiles ---
+    function couleur(etoiles) {
+      if (etoiles >= 30) return 'darkgreen';
+      if (etoiles >= 15) return 'green';
+      if (etoiles >= 6) return 'orange';
+      return 'red';
+    }
+
+    // --- Dessiner un point sur la carte ---
+    function dessinerPoint(m) {
+      L.circleMarker([m.lat, m.lon], {
+        radius: 10,
+        color: couleur(Number(m.etoiles)),
+        fillOpacity: 0.8
+      }).addTo(carte)
+        .bindPopup('⭐ ' + m.etoiles + ' étoiles<br>💡 ' + (m.lux || '?') + ' lux');
+    }
+
+    // --- Au démarrage : récupérer toutes les mesures du tableau ---
+    fetch(URL_TABLEAU)
+      .then(reponse => reponse.json())
+      .then(mesures => mesures.forEach(dessinerPoint))
+      .catch(() => alert("Impossible de charger les mesures"));
+
+    // --- Ajouter une mesure : l'envoyer au tableau + la dessiner ---
+    function ajouterMesure(lat, lon) {
+      const m = {
+        lat: lat,
+        lon: lon,
+        lux: document.getElementById('lux').value,
+        etoiles: document.getElementById('etoiles').value
+      };
+
+      if (m.etoiles === '') {
+        alert("Entre au moins le nombre d'étoiles !");
+        return;
+      }
+
+      fetch(URL_TABLEAU, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(m)
+      });
+
+      dessinerPoint(m);
+      document.getElementById('lux').value = '';
+      document.getElementById('etoiles').value = '';
+    }
+
+    // --- Bouton GPS ---
+    document.getElementById('bouton').onclick = function () {
+      navigator.geolocation.getCurrentPosition(function (position) {
+        ajouterMesure(position.coords.latitude, position.coords.longitude);
+        carte.setView([position.coords.latitude, position.coords.longitude], 15);
+      }, function () {
+        alert("Position impossible : clique plutôt sur la carte.");
+      });
+    };
+
+    // --- Clic sur la carte ---
+    carte.on('click', function (e) {
+      ajouterMesure(e.latlng.lat, e.latlng.lng);
+    });
+  </script>
+</body>
+</html>
